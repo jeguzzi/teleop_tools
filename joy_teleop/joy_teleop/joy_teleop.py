@@ -230,6 +230,12 @@ class JoyTeleop(Node):
         cmd = self.command_list[c]
         msg = self.get_interface_type(cmd['interface_type'], '.msg')()
 
+        # CHANGED: jerome (else it does not work wih empty messages as the YAML is not
+        # loaded correcly when we have an empty dict `{}`)
+
+        if not 'message_value' in cmd and not 'axis_mappings' in cmd:
+            cmd['message_value'] = {}
+
         if 'message_value' in cmd:
             if cmd['message_value'] is not None:
                 for target, param in cmd['message_value'].items():
@@ -271,6 +277,21 @@ class JoyTeleop(Node):
     def run_action(self, c, joy_state):
         cmd = self.command_list[c]
         goal = self.get_interface_type(cmd['interface_type'], '.action').Goal()
+        if 'axis_mappings' in cmd:
+            for mapping, values in cmd['axis_mappings'].items():
+                if 'axis' in values:
+                    if len(joy_state.axes) > values['axis']:
+                        value = (joy_state.axes[values['axis']] * values.get('scale', 1.0) +
+                                 values.get('offset', 0.0))
+                    else:
+                        self.get_logger().error(
+                            'Joystick has only {} axes (indexed from 0),'
+                            'but #{} was referenced in config.'.format(
+                                len(joy_state.axes), values['axis']))
+                        value = 0.0
+                else:
+                    continue
+                set_message_fields(goal, {mapping: value})
         for target, value in cmd['action_goal'].items():
             set_message_fields(goal, {target: value})
 
